@@ -309,6 +309,12 @@ function createTables() {
         }
       });
 
+      db.run(`ALTER TABLE stream_rotations ADD COLUMN repeat_days TEXT`, (err) => {
+        if (err && !err.message.includes('duplicate column name')) {
+          console.error('Error adding repeat_days column to stream_rotations:', err.message);
+        }
+      });
+
       db.run(`ALTER TABLE users ADD COLUMN youtube_redirect_uri TEXT`, (err) => {
         if (err && !err.message.includes('duplicate column name')) {
           console.error('Error adding youtube_redirect_uri column:', err.message);

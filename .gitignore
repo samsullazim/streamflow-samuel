@@ -6,3 +6,7 @@ logs/
 .env
 package-lock.json
 db/streamflow.db
+db/sessions.db
+streamflow.log
+*.log
+streamflow-data-*.tar.gz

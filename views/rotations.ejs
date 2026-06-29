@@ -338,24 +338,40 @@
               Server time: loading...
             </span>
           </div>
-          <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div>
               <label class="text-sm font-medium text-white block mb-2">Start Time</label>
               <input type="time" id="rotationStartTime" name="rotationStartTime" class="w-full px-4 py-2.5 bg-dark-700 border border-gray-600 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary [color-scheme:dark]" required>
-              <p class="text-xs text-gray-500 mt-1">Daily start time for the rotation</p>
+              <p class="text-xs text-gray-500 mt-1">Jam mulai live</p>
             </div>
             <div>
-              <label class="text-sm font-medium text-white block mb-2">End Time <span id="rotationDurationBadge" class="bg-gray-700 text-xs text-gray-300 px-2 py-0.5 rounded ml-2">Duration: 00:00</span></label>
-              <input type="time" id="rotationEndTime" name="rotationEndTime" class="w-full px-4 py-2.5 bg-dark-700 border border-gray-600 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary [color-scheme:dark]" required>
-              <p class="text-xs text-gray-500 mt-1">Daily end time for the rotation</p>
+              <label class="text-sm font-medium text-white block mb-2">Durasi Jam</label>
+              <input type="number" id="rotationDurationHours" name="rotationDurationHours" min="0" max="23" value="1" class="w-full px-4 py-2.5 bg-dark-700 border border-gray-600 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary" required>
+            </div>
+            <div>
+              <label class="text-sm font-medium text-white block mb-2">Durasi Menit <span id="rotationDurationBadge" class="bg-gray-700 text-xs text-gray-300 px-2 py-0.5 rounded ml-2">End: --:--</span></label>
+              <input type="number" id="rotationDurationMinutes" name="rotationDurationMinutes" min="0" max="59" value="0" class="w-full px-4 py-2.5 bg-dark-700 border border-gray-600 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary" required>
             </div>
             <div>
               <label class="text-sm font-medium text-white block mb-2">Repeat</label>
               <select id="repeatMode" name="repeatMode" class="w-full px-4 py-2.5 bg-dark-700 border border-gray-600 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary">
                 <option value="daily" selected>Every Day</option>
+                <option value="custom_days">Hari tertentu</option>
                 <option value="weekly">Every Week</option>
                 <option value="monthly">Every Month</option>
               </select>
+            </div>
+          </div>
+          <div id="repeatDaysContainer" class="hidden mt-3 bg-dark-700 border border-gray-600 rounded-lg p-3">
+            <label class="text-sm font-medium text-white block mb-2">Pilih hari repeat</label>
+            <div class="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-2 text-sm">
+              <label class="flex items-center gap-2"><input type="checkbox" class="repeat-day" value="1"> Senin</label>
+              <label class="flex items-center gap-2"><input type="checkbox" class="repeat-day" value="2"> Selasa</label>
+              <label class="flex items-center gap-2"><input type="checkbox" class="repeat-day" value="3"> Rabu</label>
+              <label class="flex items-center gap-2"><input type="checkbox" class="repeat-day" value="4"> Kamis</label>
+              <label class="flex items-center gap-2"><input type="checkbox" class="repeat-day" value="5"> Jumat</label>
+              <label class="flex items-center gap-2"><input type="checkbox" class="repeat-day" value="6"> Sabtu</label>
+              <label class="flex items-center gap-2"><input type="checkbox" class="repeat-day" value="0"> Minggu</label>
             </div>
           </div>
 
@@ -396,6 +412,40 @@
           </div>
 
           <div class="border-t border-gray-700 pt-4">
+            <h4 class="text-sm font-medium text-white mb-3">Bulk Metadata Generator</h4>
+            <div class="bg-gray-900/60 border border-gray-700 rounded-lg p-4 mb-5">
+              <p class="text-xs text-gray-400 mb-3">Pilih video/playlist di item pertama, paste judul per baris, upload thumbnail banyak, lalu klik generate. Kalau judul/thumbnail habis, sistem akan ulang dari awal.</p>
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label class="text-xs text-gray-400 block mb-1">Judul per baris</label>
+                  <textarea id="bulkRotationTitles" rows="7" class="w-full px-3 py-2.5 bg-dark-700 border border-gray-600 rounded-lg text-sm resize-y focus:border-primary focus:ring-1 focus:ring-primary" placeholder="Judul live 1&#10;Judul live 2&#10;Judul live 3"></textarea>
+                </div>
+                <div>
+                  <label class="text-xs text-gray-400 block mb-1">Deskripsi sama untuk semua item</label>
+                  <textarea id="bulkRotationDescription" rows="7" class="w-full px-3 py-2.5 bg-dark-700 border border-gray-600 rounded-lg text-sm resize-y focus:border-primary focus:ring-1 focus:ring-primary" placeholder="Deskripsi live, link, CTA, dll..."></textarea>
+                </div>
+                <div>
+                  <label class="text-xs text-gray-400 block mb-1">Tags sama untuk semua item</label>
+                  <input type="text" id="bulkRotationTags" class="w-full px-3 py-2.5 bg-dark-700 border border-gray-600 rounded-lg text-sm focus:border-primary focus:ring-1 focus:ring-primary" placeholder="tag1, tag2, tag3">
+                  <p class="text-xs text-gray-500 mt-1">Pisahkan pakai koma.</p>
+                  <button type="button" onclick="syncBulkMetaToItems()" class="mt-3 w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors text-sm font-medium">
+                    <i class="ti ti-copy"></i>
+                    <span>Sync Deskripsi & Tags ke Semua Item</span>
+                  </button>
+                </div>
+                <div>
+                  <label class="text-xs text-gray-400 block mb-1">Bulk thumbnails</label>
+                  <div class="border-2 border-dashed border-gray-600 rounded-lg p-4 text-center hover:border-primary transition-colors">
+                    <input type="file" id="bulkRotationThumbnails" accept="image/*" multiple class="w-full text-xs text-gray-300">
+                    <p class="text-xs text-gray-500 mt-2">Urut sesuai nama file / urutan pilih browser.</p>
+                  </div>
+                  <button type="button" onclick="generateBulkRotationItems()" class="mt-3 w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-primary hover:bg-blue-600 text-white rounded-lg transition-colors text-sm font-medium">
+                    <i class="ti ti-wand"></i>
+                    <span>Generate Items dari List</span>
+                  </button>
+                </div>
+              </div>
+            </div>
             <h4 class="text-sm font-medium text-white mb-4">Rotation Items</h4>
             <div id="rotationItemsContainer" class="space-y-4"></div>
             <button type="button" onclick="addRotationItem()" class="mt-4 w-full flex items-center justify-center gap-2 px-4 py-3 bg-gray-700/50 hover:bg-gray-700 border-2 border-dashed border-gray-600 hover:border-gray-500 text-gray-400 hover:text-white rounded-lg transition-colors">
@@ -492,35 +542,61 @@ function updateRotationServerTime() {
 updateRotationServerTime();
 setInterval(updateRotationServerTime, 1000);
 
+function getRotationDurationMinutes() {
+  const hours = parseInt(document.getElementById('rotationDurationHours').value || '0', 10);
+  const minutes = parseInt(document.getElementById('rotationDurationMinutes').value || '0', 10);
+  return (Math.max(0, hours) * 60) + Math.max(0, minutes);
+}
+
+function calculateEndDateTime(startDate) {
+  const durationMinutes = getRotationDurationMinutes();
+  const endDate = new Date(startDate);
+  endDate.setMinutes(endDate.getMinutes() + durationMinutes);
+  return endDate;
+}
+
 function calculateDuration() {
   const startTime = document.getElementById('rotationStartTime').value;
-  const endTime = document.getElementById('rotationEndTime').value;
   const badge = document.getElementById('rotationDurationBadge');
-  
-  if (!startTime || !endTime) {
-    badge.textContent = 'Duration: 00:00';
+  const durationMinutes = getRotationDurationMinutes();
+
+  if (!startTime || durationMinutes <= 0) {
+    badge.textContent = 'End: --:--';
     return;
   }
-  
+
   const [startH, startM] = startTime.split(':').map(Number);
-  const [endH, endM] = endTime.split(':').map(Number);
-  
-  let startMinutes = startH * 60 + startM;
-  let endMinutes = endH * 60 + endM;
-  
-  if (endMinutes <= startMinutes) {
-    endMinutes += 24 * 60;
-  }
-  
-  const diffMinutes = endMinutes - startMinutes;
-  const hours = Math.floor(diffMinutes / 60);
-  const minutes = diffMinutes % 60;
-  
-  badge.textContent = `Duration: ${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+  const startDate = new Date();
+  startDate.setHours(startH, startM, 0, 0);
+  const endDate = calculateEndDateTime(startDate);
+  const endH = String(endDate.getHours()).padStart(2, '0');
+  const endM = String(endDate.getMinutes()).padStart(2, '0');
+  const durH = Math.floor(durationMinutes / 60);
+  const durM = durationMinutes % 60;
+  badge.textContent = `End: ${endH}:${endM} (${String(durH).padStart(2, '0')}:${String(durM).padStart(2, '0')})`;
 }
 
 document.getElementById('rotationStartTime').addEventListener('change', calculateDuration);
-document.getElementById('rotationEndTime').addEventListener('change', calculateDuration);
+document.getElementById('rotationDurationHours').addEventListener('input', calculateDuration);
+document.getElementById('rotationDurationMinutes').addEventListener('input', calculateDuration);
+
+function toggleRepeatDays() {
+  const mode = document.getElementById('repeatMode').value;
+  document.getElementById('repeatDaysContainer').classList.toggle('hidden', mode !== 'custom_days');
+}
+
+document.getElementById('repeatMode').addEventListener('change', toggleRepeatDays);
+
+function getSelectedRepeatDays() {
+  return Array.from(document.querySelectorAll('.repeat-day:checked')).map(cb => cb.value).join(',');
+}
+
+function setSelectedRepeatDays(days) {
+  const selected = String(days || '').split(',').filter(Boolean);
+  document.querySelectorAll('.repeat-day').forEach(cb => {
+    cb.checked = selected.includes(cb.value);
+  });
+}
 
 function showToast(type, message) {
   const toast = document.getElementById('toast');
@@ -554,10 +630,14 @@ function openCreateRotationModal() {
   document.getElementById('rotationModalTitle').textContent = 'Create New Rotation';
   document.getElementById('rotationForm').reset();
   document.getElementById('rotationId').value = '';
-  document.getElementById('rotationDurationBadge').textContent = 'Duration: 00:00';
+  document.getElementById('rotationDurationHours').value = '1';
+  document.getElementById('rotationDurationMinutes').value = '0';
+  document.getElementById('rotationDurationBadge').textContent = 'End: --:--';
   document.getElementById('globalMonetization').checked = false;
   
   document.getElementById('repeatMode').value = 'daily';
+  setSelectedRepeatDays('');
+  toggleRepeatDays();
   
   const channelSelectorBtn = document.querySelector('#rotationChannelSelector > button');
   channelSelectorBtn.disabled = false;
@@ -933,12 +1013,109 @@ function selectRotationChannel(channelId, channelName, channelThumbnail) {
   toggleRotationChannelDropdown();
 }
 
+function getBulkSourceVideo() {
+  const firstItem = document.querySelector('.rotation-item');
+  if (!firstItem) return null;
+  const videoId = firstItem.querySelector('.video-id-input')?.value || '';
+  const label = firstItem.querySelector('.selected-video-text')?.textContent || '';
+  if (!videoId) return null;
+  return { videoId, label };
+}
+
+function setFileInputFile(input, file) {
+  if (!input || !file) return;
+  const dt = new DataTransfer();
+  dt.items.add(file);
+  input.files = dt.files;
+  input.dispatchEvent(new Event('change', { bubbles: true }));
+}
+
+function setItemTags(itemEl, tagsText) {
+  const container = itemEl.querySelector('.tags-container');
+  const hidden = itemEl.querySelector('.tags-hidden');
+  if (!container || !hidden) return;
+  container.querySelectorAll('.tag-chip').forEach(el => el.remove());
+  if (Array.isArray(container._tags)) {
+    container._tags.length = 0;
+  }
+  hidden.value = '';
+  const tags = (tagsText || '').split(',').map(t => t.trim()).filter(Boolean).join(',');
+  if (tags && container._addTags) {
+    container._addTags(tags);
+  } else if (container._renderTags) {
+    container._renderTags();
+  }
+}
+
+function syncBulkMetaToItems() {
+  const description = document.getElementById('bulkRotationDescription').value || '';
+  const tags = document.getElementById('bulkRotationTags').value || '';
+  const itemElements = document.querySelectorAll('.rotation-item');
+  if (itemElements.length === 0) {
+    showToast('error', 'Belum ada item untuk di-sync');
+    return;
+  }
+  itemElements.forEach(itemEl => {
+    const idx = itemEl.dataset.index;
+    const descEl = itemEl.querySelector(`textarea[name="items[${idx}][description]"]`);
+    if (descEl) descEl.value = description;
+    setItemTags(itemEl, tags);
+  });
+  showToast('success', `Deskripsi & tags disinkronkan ke ${itemElements.length} item`);
+}
+
+function generateBulkRotationItems() {
+  const source = getBulkSourceVideo();
+  if (!source) {
+    showToast('error', 'Pilih video/playlist di item pertama dulu');
+    return;
+  }
+
+  const titles = document.getElementById('bulkRotationTitles').value
+    .split('\n')
+    .map(t => t.trim())
+    .filter(Boolean);
+  const bulkDescription = document.getElementById('bulkRotationDescription').value || '';
+  const bulkTags = document.getElementById('bulkRotationTags').value || '';
+  const thumbnailFiles = Array.from(document.getElementById('bulkRotationThumbnails').files || []);
+
+  if (titles.length === 0) {
+    showToast('error', 'Paste minimal 1 judul');
+    return;
+  }
+  if (thumbnailFiles.length === 0) {
+    showToast('error', 'Upload minimal 1 thumbnail');
+    return;
+  }
+
+  const itemCount = Math.max(titles.length, thumbnailFiles.length);
+  const container = document.getElementById('rotationItemsContainer');
+  container.innerHTML = '';
+  rotationItemCount = 0;
+
+  for (let i = 0; i < itemCount; i++) {
+    addRotationItem();
+    const itemEl = document.querySelector(`.rotation-item[data-index="${rotationItemCount}"]`);
+    const idx = itemEl.dataset.index;
+    itemEl.querySelector('.video-id-input').value = source.videoId;
+    itemEl.querySelector('.selected-video-text').textContent = source.label;
+    itemEl.querySelector(`input[name="items[${idx}][title]"]`).value = titles[i % titles.length];
+    const descEl = itemEl.querySelector(`textarea[name="items[${idx}][description]"]`);
+    if (descEl) descEl.value = bulkDescription;
+    setItemTags(itemEl, bulkTags);
+    setFileInputFile(itemEl.querySelector('.thumbnail-input'), thumbnailFiles[i % thumbnailFiles.length]);
+  }
+
+  showToast('success', `Generated ${itemCount} rotation items`);
+}
+
 async function saveRotation() {
   const rotationId = document.getElementById('rotationId').value;
   const name = document.getElementById('rotationName').value;
   const repeatMode = document.getElementById('repeatMode').value;
+  const repeatDays = getSelectedRepeatDays();
   const startTime = document.getElementById('rotationStartTime').value;
-  const endTime = document.getElementById('rotationEndTime').value;
+  const durationMinutes = getRotationDurationMinutes();
   const globalPrivacy = document.getElementById('globalPrivacy').value;
   const globalCategory = document.getElementById('globalCategory').value;
   const globalMonetization = document.getElementById('globalMonetization').checked;
@@ -947,8 +1124,12 @@ async function saveRotation() {
     showToast('error', 'Please enter rotation name');
     return;
   }
-  if (!startTime || !endTime) {
-    showToast('error', 'Please set start and end time');
+  if (!startTime || durationMinutes <= 0) {
+    showToast('error', 'Isi start time dan durasi minimal 1 menit');
+    return;
+  }
+  if (repeatMode === 'custom_days' && !repeatDays) {
+    showToast('error', 'Pilih minimal 1 hari repeat');
     return;
   }
   
@@ -971,7 +1152,7 @@ async function saveRotation() {
   const today = `${year}-${month}-${day}`;
   
   const startDateTime = new Date(`${today}T${startTime}:00`);
-  const endDateTime = new Date(`${today}T${endTime}:00`);
+  const endDateTime = calculateEndDateTime(startDateTime);
   
   const formatLocalDateTime = (date) => {
     const y = date.getFullYear();
@@ -1037,6 +1218,7 @@ async function saveRotation() {
   
   formData.append('name', name);
   formData.append('repeat_mode', repeatMode);
+  formData.append('repeat_days', repeatDays);
   formData.append('start_time', startDateTimeStr);
   formData.append('end_time', endDateTimeStr);
   formData.append('youtube_channel_id', youtubeChannelId);
@@ -1095,14 +1277,20 @@ async function editRotation(id) {
       document.getElementById('rotationId').value = rotation.id;
       document.getElementById('rotationName').value = rotation.name;
       document.getElementById('repeatMode').value = rotation.repeat_mode || 'daily';
+      setSelectedRepeatDays(rotation.repeat_days || '');
+      toggleRepeatDays();
       
       if (rotation.start_time) {
-        const startTime = new Date(rotation.start_time).toTimeString().slice(0, 5);
+        const startDate = new Date(rotation.start_time);
+        const startTime = startDate.toTimeString().slice(0, 5);
         document.getElementById('rotationStartTime').value = startTime;
-      }
-      if (rotation.end_time) {
-        const endTime = new Date(rotation.end_time).toTimeString().slice(0, 5);
-        document.getElementById('rotationEndTime').value = endTime;
+        if (rotation.end_time) {
+          const endDate = new Date(rotation.end_time);
+          let diffMinutes = Math.round((endDate - startDate) / 60000);
+          if (diffMinutes <= 0) diffMinutes += 24 * 60;
+          document.getElementById('rotationDurationHours').value = String(Math.floor(diffMinutes / 60));
+          document.getElementById('rotationDurationMinutes').value = String(diffMinutes % 60);
+        }
       }
       
       calculateDuration();

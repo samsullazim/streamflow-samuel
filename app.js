@@ -2531,9 +2531,35 @@ app.delete('/api/settings/youtube-channel/:id', isAuthenticated, async (req, res
 });
 
 const { google } = require('googleapis');
+const axiosOAuth = require('axios');
 
 function getYouTubeOAuth2Client(clientId, clientSecret, redirectUri) {
   return new google.auth.OAuth2(clientId, clientSecret, redirectUri);
+}
+
+async function exchangeGoogleOAuthCode(oauth2Client, code, clientId, clientSecret, redirectUri) {
+  const body = new URLSearchParams({
+    code,
+    client_id: clientId,
+    client_secret: clientSecret,
+    redirect_uri: redirectUri,
+    grant_type: 'authorization_code'
+  }).toString();
+  const response = await axiosOAuth.post('https://oauth2.googleapis.com/token', body, {
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+      'Accept': 'application/json',
+      'Accept-Encoding': 'identity'
+    },
+    timeout: 30000,
+    decompress: false,
+    validateStatus: () => true
+  });
+  if (response.status < 200 || response.status >= 300) {
+    const detail = typeof response.data === 'string' ? response.data : JSON.stringify(response.data);
+    throw new Error(`Google token exchange failed ${response.status}: ${detail}`);
+  }
+  return response.data;
 }
 
 app.get('/auth/youtube', isAuthenticated, async (req, res) => {
@@ -2605,14 +2631,24 @@ app.get('/auth/youtube/callback', isAuthenticated, async (req, res) => {
     
     const oauth2Client = getYouTubeOAuth2Client(user.youtube_client_id, clientSecret, redirectUri);
     
-    const { tokens } = await oauth2Client.getToken(code);
+    const tokens = await exchangeGoogleOAuthCode(oauth2Client, code, user.youtube_client_id, clientSecret, redirectUri);
     oauth2Client.setCredentials(tokens);
     
-    const youtube = google.youtube({ version: 'v3', auth: oauth2Client });
-    const channelResponse = await youtube.channels.list({
-      part: 'snippet,statistics',
-      mine: true
+    const channelResponse = await axiosOAuth.get('https://youtube.googleapis.com/youtube/v3/channels', {
+      params: { part: 'snippet,statistics', mine: 'true' },
+      headers: {
+        'Authorization': `Bearer ${tokens.access_token}`,
+        'Accept': 'application/json',
+        'Accept-Encoding': 'identity'
+      },
+      timeout: 30000,
+      decompress: false,
+      validateStatus: () => true
     });
+    if (channelResponse.status < 200 || channelResponse.status >= 300) {
+      const detail = typeof channelResponse.data === 'string' ? channelResponse.data : JSON.stringify(channelResponse.data);
+      throw new Error(`YouTube channel fetch failed ${channelResponse.status}: ${detail}`);
+    }
     
     if (!channelResponse.data.items || channelResponse.data.items.length === 0) {
       return res.redirect('/settings?error=No YouTube channel found for this account&activeTab=integration');
@@ -4383,7 +4419,7 @@ app.get('/api/rotations/:id', isAuthenticated, async (req, res) => {
 
 app.post('/api/rotations', isAuthenticated, uploadThumbnail.any(), async (req, res) => {
   try {
-    const { name, repeat_mode, start_time, end_time, items, youtube_channel_id } = req.body;
+    const { name, repeat_mode, repeat_days, start_time, end_time, items, youtube_channel_id } = req.body;
     
     const parsedItems = typeof items === 'string' ? JSON.parse(items) : items;
     
@@ -4402,6 +4438,7 @@ app.post('/api/rotations', isAuthenticated, uploadThumbnail.any(), async (req, r
       start_time,
       end_time,
       repeat_mode: repeat_mode || 'daily',
+      repeat_days: repeat_days || null,
       youtube_channel_id: youtube_channel_id || null
     });
     
@@ -4463,7 +4500,7 @@ app.put('/api/rotations/:id', isAuthenticated, uploadThumbnail.any(), async (req
       return res.status(403).json({ success: false, error: 'Not authorized' });
     }
     
-    const { name, repeat_mode, start_time, end_time, items, youtube_channel_id } = req.body;
+    const { name, repeat_mode, repeat_days, start_time, end_time, items, youtube_channel_id } = req.body;
     
     const parsedItems = typeof items === 'string' ? JSON.parse(items) : items;
     
@@ -4473,6 +4510,7 @@ app.put('/api/rotations/:id', isAuthenticated, uploadThumbnail.any(), async (req
       start_time,
       end_time,
       repeat_mode: repeat_mode || 'daily',
+      repeat_days: repeat_days || null,
       youtube_channel_id: youtube_channel_id || null
     });
     

@@ -41,16 +41,30 @@ function parseLocalDateTime(dateStr) {
   return new Date(year, month - 1, day, hours, minutes, seconds || 0);
 }
 
+function getRepeatDays(rotation) {
+  if (!rotation.repeat_days) return [];
+  return String(rotation.repeat_days)
+    .split(',')
+    .map(d => parseInt(d, 10))
+    .filter(d => Number.isInteger(d) && d >= 0 && d <= 6);
+}
+
 function getNextSchedule(rotation, baseDate = null) {
   const originalStart = parseLocalDateTime(rotation.start_time);
   const originalEnd = parseLocalDateTime(rotation.end_time);
-  
-  const startHours = originalStart.getHours();
-  const startMinutes = originalStart.getMinutes();
-  const endHours = originalEnd.getHours();
-  const endMinutes = originalEnd.getMinutes();
-  
-  const now = new Date();
+  const durationMs = originalEnd - originalStart > 0 ? originalEnd - originalStart : (originalEnd - originalStart) + (24 * 60 * 60 * 1000);
+  const now = baseDate || new Date();
+  const repeatDays = getRepeatDays(rotation);
+
+  if (rotation.repeat_mode === 'custom_days' && repeatDays.length > 0) {
+    for (let addDays = 1; addDays <= 370; addDays++) {
+      const nextStart = new Date(originalStart);
+      nextStart.setDate(nextStart.getDate() + addDays);
+      if (!repeatDays.includes(nextStart.getDay())) continue;
+      const nextEnd = new Date(nextStart.getTime() + durationMs);
+      if (nextStart > now) return { start: nextStart, end: nextEnd };
+    }
+  }
   
   let nextStart = new Date(originalStart);
   let nextEnd = new Date(originalEnd);
@@ -539,7 +553,19 @@ async function activateRotation(rotationId) {
       nextEnd.setDate(nextEnd.getDate() + 1);
     }
     
-    if (now >= nextStart) {
+    if (rotation.repeat_mode === 'custom_days') {
+      const repeatDays = getRepeatDays(rotation);
+      const durationMs = nextEnd - nextStart > 0 ? nextEnd - nextStart : (nextEnd - nextStart) + (24 * 60 * 60 * 1000);
+      for (let addDays = 0; addDays <= 370; addDays++) {
+        const candidate = new Date(nextStart);
+        candidate.setDate(candidate.getDate() + addDays);
+        if (repeatDays.length > 0 && !repeatDays.includes(candidate.getDay())) continue;
+        if (candidate <= now) continue;
+        nextStart = candidate;
+        nextEnd = new Date(nextStart.getTime() + durationMs);
+        break;
+      }
+    } else if (now >= nextStart) {
       nextStart.setDate(nextStart.getDate() + 1);
       nextEnd.setDate(nextEnd.getDate() + 1);
     }
