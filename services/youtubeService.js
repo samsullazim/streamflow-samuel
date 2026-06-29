@@ -5,8 +5,86 @@ const Stream = require('../models/Stream');
 const YoutubeChannel = require('../models/YoutubeChannel');
 const fs = require('fs');
 const path = require('path');
+const axios = require('axios');
+const FormData = require('form-data');
 
 const loggedAlreadyHasBroadcast = new Set();
+
+async function ytRequest(method, url, accessToken, { params = {}, data = null, headers = {} } = {}) {
+  const response = await axios({
+    method,
+    url,
+    params,
+    data,
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      Accept: 'application/json',
+      'Accept-Encoding': 'identity',
+      ...headers
+    },
+    timeout: 60000,
+    decompress: false,
+    validateStatus: () => true
+  });
+  if (response.status < 200 || response.status >= 300) {
+    const detail = typeof response.data === 'string' ? response.data : JSON.stringify(response.data);
+    throw new Error(`YouTube API ${method.toUpperCase()} ${url} failed ${response.status}: ${detail}`);
+  }
+  return response.data;
+}
+
+async function getValidAccessToken(user, selectedChannel) {
+  let accessToken = decrypt(selectedChannel.access_token);
+  if (!accessToken) throw new Error('No access token');
+
+  try {
+    await ytRequest('get', 'https://youtube.googleapis.com/youtube/v3/channels', accessToken, {
+      params: { part: 'id', mine: 'true' }
+    });
+    return accessToken;
+  } catch (err) {
+    if (!err.message.includes('401') && !err.message.includes('UNAUTHENTICATED')) throw err;
+
+    console.log('[YouTubeService] Access token expired, refreshing...');
+    const clientSecret = decrypt(user.youtube_client_secret);
+    const refreshToken = decrypt(selectedChannel.refresh_token);
+    if (!refreshToken) throw new Error('No refresh token available — reconnect YouTube');
+
+    const refreshResponse = await axios.post('https://oauth2.googleapis.com/token', new URLSearchParams({
+      client_id: user.youtube_client_id,
+      client_secret: clientSecret,
+      refresh_token: refreshToken,
+      grant_type: 'refresh_token'
+    }).toString(), {
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Accept': 'application/json',
+        'Accept-Encoding': 'identity'
+      },
+      timeout: 30000,
+      decompress: false,
+      validateStatus: () => true
+    });
+
+    if (refreshResponse.status < 200 || refreshResponse.status >= 300) {
+      throw new Error(`Token refresh failed ${refreshResponse.status}: ${JSON.stringify(refreshResponse.data)}`);
+    }
+
+    accessToken = refreshResponse.data.access_token;
+    await YoutubeChannel.update(selectedChannel.id, {
+      access_token: encrypt(accessToken)
+    });
+
+    if (refreshResponse.data.refresh_token) {
+      await YoutubeChannel.update(selectedChannel.id, {
+        refresh_token: encrypt(refreshResponse.data.refresh_token)
+      });
+    }
+
+    console.log('[YouTubeService] Access token refreshed successfully');
+    return accessToken;
+  }
+}
 
 function getYouTubeOAuth2Client(clientId, clientSecret, redirectUri) {
   return new google.auth.OAuth2(clientId, clientSecret, redirectUri);
@@ -18,13 +96,12 @@ function omitUndefined(value) {
   );
 }
 
-async function syncBroadcastMonetization(youtube, broadcastId, enabled) {
-  const broadcastResponse = await youtube.liveBroadcasts.list({
-    part: 'id,snippet,contentDetails,status,monetizationDetails',
-    id: broadcastId
+async function syncBroadcastMonetization(accessToken, broadcastId, enabled) {
+  const broadcastData = await ytRequest('get', 'https://youtube.googleapis.com/youtube/v3/liveBroadcasts', accessToken, {
+    params: { part: 'id,snippet,contentDetails,status,monetizationDetails', id: broadcastId }
   });
 
-  const currentBroadcast = broadcastResponse.data.items?.[0];
+  const currentBroadcast = broadcastData.items?.[0];
   if (!currentBroadcast) {
     throw new Error(`Broadcast ${broadcastId} not found`);
   }
@@ -80,9 +157,10 @@ async function syncBroadcastMonetization(youtube, broadcastId, enabled) {
         }
   };
 
-  await youtube.liveBroadcasts.update({
-    part: 'id,snippet,contentDetails,status,monetizationDetails',
-    requestBody
+  await ytRequest('put', 'https://youtube.googleapis.com/youtube/v3/liveBroadcasts', accessToken, {
+    params: { part: 'id,snippet,contentDetails,status,monetizationDetails' },
+    data: requestBody,
+    headers: { 'Content-Type': 'application/json' }
   });
 }
 
@@ -121,7 +199,7 @@ async function createYouTubeBroadcast(streamId, baseUrl) {
   }
 
   const clientSecret = decrypt(user.youtube_client_secret);
-  const accessToken = decrypt(selectedChannel.access_token);
+  const accessToken = await getValidAccessToken(user, selectedChannel);
   const refreshToken = decrypt(selectedChannel.refresh_token);
 
   if (!clientSecret || !accessToken) {
@@ -176,17 +254,18 @@ async function createYouTubeBroadcast(streamId, baseUrl) {
     }
   };
 
-  broadcastResponse = await youtube.liveBroadcasts.insert({
-    part: 'snippet,contentDetails,status',
-    requestBody: broadcastData
+  broadcastResponse = await ytRequest('post', 'https://youtube.googleapis.com/youtube/v3/liveBroadcasts', accessToken, {
+    params: { part: 'snippet,contentDetails,status' },
+    data: broadcastData,
+    headers: { 'Content-Type': 'application/json' }
   });
 
-  const broadcast = broadcastResponse.data;
+  const broadcast = broadcastResponse;
   console.log(`[YouTubeService] Created broadcast: ${broadcast.id}`);
 
   if (stream.youtube_monetization) {
     try {
-      await syncBroadcastMonetization(youtube, broadcast.id, true);
+      await syncBroadcastMonetization(accessToken, broadcast.id, true);
       console.log(`[YouTubeService] Enabled monetization for broadcast ${broadcast.id}`);
     } catch (monetizationError) {
       console.warn(`[YouTubeService] Failed to enable monetization for broadcast ${broadcast.id}. Continuing without monetization. Error: ${monetizationError.message}`);
@@ -196,16 +275,15 @@ async function createYouTubeBroadcast(streamId, baseUrl) {
 
   if (tagsArray.length > 0 || stream.youtube_category) {
     try {
-      const videoResponse = await youtube.videos.list({
-        part: 'snippet',
-        id: broadcast.id
+      const videoResponse = await ytRequest('get', 'https://youtube.googleapis.com/youtube/v3/videos', accessToken, {
+        params: { part: 'snippet', id: broadcast.id }
       });
 
-      if (videoResponse.data.items && videoResponse.data.items.length > 0) {
-        const currentSnippet = videoResponse.data.items[0].snippet;
-        await youtube.videos.update({
-          part: 'snippet',
-          requestBody: {
+      if (videoResponse.items && videoResponse.items.length > 0) {
+        const currentSnippet = videoResponse.items[0].snippet;
+        await ytRequest('put', 'https://youtube.googleapis.com/youtube/v3/videos', accessToken, {
+          params: { part: 'snippet' },
+          data: {
             id: broadcast.id,
             snippet: {
               title: stream.title,
@@ -215,7 +293,8 @@ async function createYouTubeBroadcast(streamId, baseUrl) {
               defaultLanguage: currentSnippet.defaultLanguage,
               defaultAudioLanguage: currentSnippet.defaultAudioLanguage
             }
-          }
+          },
+          headers: { 'Content-Type': 'application/json' }
         });
       }
     } catch (updateError) {
@@ -228,13 +307,12 @@ async function createYouTubeBroadcast(streamId, baseUrl) {
       const projectRoot = path.resolve(__dirname, '..');
       const thumbnailPath = path.join(projectRoot, 'public', stream.youtube_thumbnail);
       if (fs.existsSync(thumbnailPath)) {
-        const thumbnailStream = fs.createReadStream(thumbnailPath);
-        await youtube.thumbnails.set({
-          videoId: broadcast.id,
-          media: {
-            mimeType: 'image/jpeg',
-            body: thumbnailStream
-          }
+        const form = new FormData();
+        form.append('media', fs.createReadStream(thumbnailPath));
+        await ytRequest('post', 'https://www.googleapis.com/upload/youtube/v3/thumbnails/set', accessToken, {
+          params: { videoId: broadcast.id },
+          data: form,
+          headers: form.getHeaders()
         });
         console.log(`[YouTubeService] Uploaded thumbnail for broadcast ${broadcast.id}`);
       }
@@ -243,9 +321,9 @@ async function createYouTubeBroadcast(streamId, baseUrl) {
     }
   }
 
-  const streamResponse = await youtube.liveStreams.insert({
-    part: 'snippet,cdn,contentDetails,status',
-    requestBody: {
+  const liveStream = await ytRequest('post', 'https://youtube.googleapis.com/youtube/v3/liveStreams', accessToken, {
+    params: { part: 'snippet,cdn,contentDetails,status' },
+    data: {
       snippet: {
         title: `${stream.title} - Stream`
       },
@@ -257,16 +335,15 @@ async function createYouTubeBroadcast(streamId, baseUrl) {
       contentDetails: {
         isReusable: false
       }
-    }
+    },
+    headers: { 'Content-Type': 'application/json' }
   });
-
-  const liveStream = streamResponse.data;
   console.log(`[YouTubeService] Created live stream: ${liveStream.id}`);
 
-  await youtube.liveBroadcasts.bind({
-    part: 'id,contentDetails',
-    id: broadcast.id,
-    streamId: liveStream.id
+  await ytRequest('post', 'https://youtube.googleapis.com/youtube/v3/liveBroadcasts/bind', accessToken, {
+    params: { part: 'id,contentDetails', id: broadcast.id, streamId: liveStream.id },
+    data: {},
+    headers: { 'Content-Type': 'application/json' }
   });
 
   const rtmpUrl = liveStream.cdn.ingestionInfo.ingestionAddress;
@@ -317,5 +394,7 @@ module.exports = {
   createYouTubeBroadcast,
   deleteYouTubeBroadcast,
   getYouTubeOAuth2Client,
-  syncBroadcastMonetization
+  syncBroadcastMonetization,
+  getValidAccessToken,
+  ytRequest
 };

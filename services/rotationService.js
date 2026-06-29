@@ -6,7 +6,32 @@ const { google } = require('googleapis');
 const { decrypt } = require('../utils/encryption');
 const path = require('path');
 const fs = require('fs');
-const { syncBroadcastMonetization } = require('./youtubeService');
+const { syncBroadcastMonetization, getValidAccessToken } = require('./youtubeService');
+const axios = require('axios');
+const FormData = require('form-data');
+
+async function ytRequest(method, url, accessToken, { params = {}, data = null, headers = {} } = {}) {
+  const response = await axios({
+    method,
+    url,
+    params,
+    data,
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      Accept: 'application/json',
+      'Accept-Encoding': 'identity',
+      ...headers
+    },
+    timeout: 60000,
+    decompress: false,
+    validateStatus: () => true
+  });
+  if (response.status < 200 || response.status >= 300) {
+    const detail = typeof response.data === 'string' ? response.data : JSON.stringify(response.data);
+    throw new Error(`YouTube API ${method.toUpperCase()} ${url} failed ${response.status}: ${detail}`);
+  }
+  return response.data;
+}
 
 function getRedirectUri(user) {
   if (user && user.youtube_redirect_uri) {
@@ -317,8 +342,9 @@ async function startRotationStream(rotation, item) {
       getRedirectUri(user)
     );
 
+    const accessToken = await getValidAccessToken(user, selectedChannel);
     oauth2Client.setCredentials({
-      access_token: decrypt(selectedChannel.access_token),
+      access_token: accessToken,
       refresh_token: decrypt(selectedChannel.refresh_token)
     });
 
@@ -326,9 +352,9 @@ async function startRotationStream(rotation, item) {
 
     const scheduledStartTime = new Date().toISOString();
 
-    const broadcastResponse = await youtube.liveBroadcasts.insert({
-      part: ['snippet', 'status', 'contentDetails'],
-      requestBody: {
+    const broadcast = await ytRequest('post', 'https://youtube.googleapis.com/youtube/v3/liveBroadcasts', accessToken, {
+      params: { part: 'snippet,status,contentDetails' },
+      data: {
         snippet: {
           title: item.title,
           description: item.description || '',
@@ -343,24 +369,23 @@ async function startRotationStream(rotation, item) {
           enableAutoStop: true,
           latencyPreference: 'normal'
         }
-      }
+      },
+      headers: { 'Content-Type': 'application/json' }
     });
-
-    const broadcast = broadcastResponse.data;
 
     let monetizationEnabled = item.youtube_monetization === true || item.youtube_monetization === 1;
     if (monetizationEnabled) {
       try {
-        await syncBroadcastMonetization(youtube, broadcast.id, true);
+        await syncBroadcastMonetization(accessToken, broadcast.id, true);
       } catch (monetizationError) {
         monetizationEnabled = false;
         console.warn(`[RotationService] Failed to enable monetization for broadcast ${broadcast.id}. Continuing without monetization. Error: ${monetizationError.message}`);
       }
     }
 
-    const streamResponse = await youtube.liveStreams.insert({
-      part: ['snippet', 'cdn'],
-      requestBody: {
+    const liveStream = await ytRequest('post', 'https://youtube.googleapis.com/youtube/v3/liveStreams', accessToken, {
+      params: { part: 'snippet,cdn' },
+      data: {
         snippet: {
           title: `Stream for ${item.title}`
         },
@@ -369,15 +394,14 @@ async function startRotationStream(rotation, item) {
           ingestionType: 'rtmp',
           resolution: '1080p'
         }
-      }
+      },
+      headers: { 'Content-Type': 'application/json' }
     });
 
-    const liveStream = streamResponse.data;
-
-    await youtube.liveBroadcasts.bind({
-      part: ['id', 'contentDetails'],
-      id: broadcast.id,
-      streamId: liveStream.id
+    await ytRequest('post', 'https://youtube.googleapis.com/youtube/v3/liveBroadcasts/bind', accessToken, {
+      params: { part: 'id,contentDetails', id: broadcast.id, streamId: liveStream.id },
+      data: {},
+      headers: { 'Content-Type': 'application/json' }
     });
 
     const rtmpUrl = liveStream.cdn.ingestionInfo.ingestionAddress;
@@ -388,12 +412,12 @@ async function startRotationStream(rotation, item) {
       try {
         const thumbnailPath = path.join(__dirname, '..', 'public', 'uploads', 'thumbnails', thumbnailToUpload);
         if (fs.existsSync(thumbnailPath)) {
-          await youtube.thumbnails.set({
-            videoId: broadcast.id,
-            media: {
-              mimeType: 'image/jpeg',
-              body: fs.createReadStream(thumbnailPath)
-            }
+          const form = new FormData();
+          form.append('media', fs.createReadStream(thumbnailPath));
+          await ytRequest('post', 'https://www.googleapis.com/upload/youtube/v3/thumbnails/set', accessToken, {
+            params: { videoId: broadcast.id },
+            data: form,
+            headers: form.getHeaders()
           });
         }
       } catch (thumbError) {
@@ -404,9 +428,9 @@ async function startRotationStream(rotation, item) {
     const tags = item.tags ? item.tags.split(',').map(t => t.trim()).filter(t => t) : [];
     if (tags.length > 0 || item.category) {
       try {
-        await youtube.videos.update({
-          part: ['snippet'],
-          requestBody: {
+        await ytRequest('put', 'https://youtube.googleapis.com/youtube/v3/videos', accessToken, {
+          params: { part: 'snippet' },
+          data: {
             id: broadcast.id,
             snippet: {
               title: item.title,
@@ -414,7 +438,8 @@ async function startRotationStream(rotation, item) {
               categoryId: item.category || '22',
               tags: tags
             }
-          }
+          },
+          headers: { 'Content-Type': 'application/json' }
         });
       } catch (updateError) {
         console.error('[RotationService] Error updating video metadata:', updateError.message);
@@ -500,24 +525,20 @@ async function stopRotationStream(rotation, item) {
           }
 
           if (selectedChannel && selectedChannel.access_token) {
-            const oauth2Client = new google.auth.OAuth2(
-              user.youtube_client_id,
-              decrypt(user.youtube_client_secret),
-              getRedirectUri(user)
-            );
-
-            oauth2Client.setCredentials({
-              access_token: decrypt(selectedChannel.access_token),
-              refresh_token: decrypt(selectedChannel.refresh_token)
-            });
-
-            const youtube = google.youtube({ version: 'v3', auth: oauth2Client });
-
-            await youtube.liveBroadcasts.transition({
-              part: ['status'],
-              id: rotationStream.youtube_broadcast_id,
-              broadcastStatus: 'complete'
-            });
+            const stopAccessToken = decrypt(selectedChannel.access_token);
+            try {
+              await ytRequest('post', 'https://youtube.googleapis.com/youtube/v3/liveBroadcasts/transition', stopAccessToken, {
+                params: { part: 'status', id: rotationStream.youtube_broadcast_id, broadcastStatus: 'complete' },
+                data: {},
+                headers: { 'Content-Type': 'application/json' }
+              });
+            } catch (transitionError) {
+              if (transitionError.message && transitionError.message.includes('redundant transition')) {
+                console.log('[RotationService] Broadcast already complete');
+              } else {
+                throw transitionError;
+              }
+            }
           }
         } catch (ytError) {
           console.error('[RotationService] Error completing YouTube broadcast:', ytError.message);
