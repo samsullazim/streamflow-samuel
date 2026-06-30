@@ -181,7 +181,8 @@ async function checkRotations() {
         for (const item of items) {
           const streamKey = `${rotation.id}_${item.id}`;
           if (activeRotationStreams.has(streamKey)) {
-            await stopRotationStream(rotation, item);
+            const streamInfo = activeRotationStreams.get(streamKey);
+            await stopRotationStream(rotation, item, streamInfo?.streamId);
             activeRotationStreams.delete(streamKey);
             loggedAlreadyRunning.delete(streamKey);
           }
@@ -224,7 +225,8 @@ async function checkRotations() {
         if (currentItem) {
           const streamKey = `${rotation.id}_${currentItem.id}`;
           if (activeRotationStreams.has(streamKey)) {
-            await stopRotationStream(rotation, currentItem);
+            const streamInfo = activeRotationStreams.get(streamKey);
+            await stopRotationStream(rotation, currentItem, streamInfo?.streamId);
             activeRotationStreams.delete(streamKey);
             loggedAlreadyRunning.delete(streamKey);
           }
@@ -486,22 +488,37 @@ async function startRotationStream(rotation, item) {
   }
 }
 
-async function stopRotationStream(rotation, item) {
+async function stopRotationStream(rotation, item, streamId = null) {
   try {
     const user = await User.findById(rotation.user_id);
     if (!user) return { success: false, error: 'User not found' };
 
-    let actualVideoId = item.video_id;
-    if (item.video_id && item.video_id.startsWith('playlist:')) {
-      actualVideoId = item.video_id.substring(9);
+    let rotationStream = null;
+
+    // PRIORITY: Use streamId from activeRotationStreams Map (exact match)
+    // This prevents stopping the WRONG stream when multiple rotations use same video+title
+    if (streamId) {
+      rotationStream = await Stream.findById(streamId);
+      if (rotationStream && rotationStream.status !== 'live') {
+        // Stream already stopped — nothing to do
+        return { success: true, message: 'Stream already stopped' };
+      }
     }
 
-    const streams = await Stream.findAll(rotation.user_id);
-    const rotationStream = streams.find(s => 
-      s.video_id === actualVideoId && 
-      s.title === item.title && 
-      s.status === 'live'
-    );
+    // FALLBACK: Search by video_id + title (old method, less reliable)
+    if (!rotationStream) {
+      let actualVideoId = item.video_id;
+      if (item.video_id && item.video_id.startsWith('playlist:')) {
+        actualVideoId = item.video_id.substring(9);
+      }
+
+      const streams = await Stream.findAll(rotation.user_id);
+      rotationStream = streams.find(s => 
+        s.video_id === actualVideoId && 
+        s.title === item.title && 
+        s.status === 'live'
+      );
+    }
 
     if (rotationStream) {
       await streamingService.stopStream(rotationStream.id);
@@ -616,7 +633,8 @@ async function pauseRotation(rotationId) {
     for (const item of rotation.items) {
       const streamKey = `${rotationId}_${item.id}`;
       if (activeRotationStreams.has(streamKey)) {
-        await stopRotationStream(rotation, item);
+        const streamInfo = activeRotationStreams.get(streamKey);
+        await stopRotationStream(rotation, item, streamInfo?.streamId);
         activeRotationStreams.delete(streamKey);
         loggedAlreadyRunning.delete(streamKey);
       }
@@ -639,7 +657,8 @@ async function stopRotation(rotationId) {
     for (const item of rotation.items) {
       const streamKey = `${rotationId}_${item.id}`;
       if (activeRotationStreams.has(streamKey)) {
-        await stopRotationStream(rotation, item);
+        const streamInfo = activeRotationStreams.get(streamKey);
+        await stopRotationStream(rotation, item, streamInfo?.streamId);
         activeRotationStreams.delete(streamKey);
         loggedAlreadyRunning.delete(streamKey);
       }
@@ -663,7 +682,7 @@ function shutdown() {
   
   for (const [streamKey, streamInfo] of activeRotationStreams) {
     console.log(`[RotationService] Stopping active rotation stream: ${streamKey}`);
-    stopRotationStream({ id: streamInfo.rotationId }, { id: streamInfo.itemId }).catch(err => {
+    stopRotationStream({ id: streamInfo.rotationId }, { id: streamInfo.itemId }, streamInfo.streamId).catch(err => {
       console.error(`[RotationService] Error stopping stream ${streamKey} during shutdown:`, err);
     });
   }
