@@ -4435,7 +4435,7 @@ app.get('/api/rotations/:id', isAuthenticated, async (req, res) => {
 
 app.post('/api/rotations', isAuthenticated, uploadThumbnail.any(), async (req, res) => {
   try {
-    const { name, repeat_mode, repeat_days, start_time, end_time, items, youtube_channel_id } = req.body;
+    const { name, repeat_mode, repeat_days, start_time, end_time, items, youtube_channel_id, random_start_max, random_duration_max } = req.body;
     
     const parsedItems = typeof items === 'string' ? JSON.parse(items) : items;
     
@@ -4455,7 +4455,9 @@ app.post('/api/rotations', isAuthenticated, uploadThumbnail.any(), async (req, r
       end_time,
       repeat_mode: repeat_mode || 'daily',
       repeat_days: repeat_days || null,
-      youtube_channel_id: youtube_channel_id || null
+      youtube_channel_id: youtube_channel_id || null,
+      random_start_max: parseInt(random_start_max) || 0,
+      random_duration_max: parseInt(random_duration_max) || 0
     });
     
     const uploadedFiles = req.files || [];
@@ -4516,7 +4518,7 @@ app.put('/api/rotations/:id', isAuthenticated, uploadThumbnail.any(), async (req
       return res.status(403).json({ success: false, error: 'Not authorized' });
     }
     
-    const { name, repeat_mode, repeat_days, start_time, end_time, items, youtube_channel_id } = req.body;
+    const { name, repeat_mode, repeat_days, start_time, end_time, items, youtube_channel_id, random_start_max, random_duration_max } = req.body;
     
     const parsedItems = typeof items === 'string' ? JSON.parse(items) : items;
     
@@ -4527,7 +4529,9 @@ app.put('/api/rotations/:id', isAuthenticated, uploadThumbnail.any(), async (req
       end_time,
       repeat_mode: repeat_mode || 'daily',
       repeat_days: repeat_days || null,
-      youtube_channel_id: youtube_channel_id || null
+      youtube_channel_id: youtube_channel_id || null,
+      random_start_max: parseInt(random_start_max) || 0,
+      random_duration_max: parseInt(random_duration_max) || 0
     });
     
     const existingItems = await Rotation.getItemsByRotationId(req.params.id);

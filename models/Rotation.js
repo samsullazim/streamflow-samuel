@@ -20,14 +20,16 @@ class Rotation {
       end_time = null,
       repeat_mode = 'daily',
       youtube_channel_id = null,
-      repeat_days = null
+      repeat_days = null,
+      random_start_max = 0,
+      random_duration_max = 0
     } = rotationData;
 
     return new Promise((resolve, reject) => {
       db.run(
-        `INSERT INTO stream_rotations (id, user_id, name, gap_minutes, is_loop, status, start_time, end_time, repeat_mode, youtube_channel_id, repeat_days)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [id, user_id, name, gap_minutes, is_loop ? 1 : 0, status, start_time, end_time, repeat_mode, youtube_channel_id, repeat_days],
+        `INSERT INTO stream_rotations (id, user_id, name, gap_minutes, is_loop, status, start_time, end_time, repeat_mode, youtube_channel_id, repeat_days, random_start_max, random_duration_max)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [id, user_id, name, gap_minutes, is_loop ? 1 : 0, status, start_time, end_time, repeat_mode, youtube_channel_id, repeat_days, random_start_max || 0, random_duration_max || 0],
         function(err) {
           if (err) {
             console.error('Error creating rotation:', err.message);

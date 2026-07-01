@@ -394,6 +394,18 @@ function createTables() {
         }
       });
 
+      db.run(`ALTER TABLE stream_rotations ADD COLUMN random_start_max INTEGER DEFAULT 0`, (err) => {
+        if (err && !err.message.includes('duplicate column name')) {
+          console.error('Error adding random_start_max column to stream_rotations:', err.message);
+        }
+      });
+
+      db.run(`ALTER TABLE stream_rotations ADD COLUMN random_duration_max INTEGER DEFAULT 0`, (err) => {
+        if (err && !err.message.includes('duplicate column name')) {
+          console.error('Error adding random_duration_max column to stream_rotations:', err.message);
+        }
+      });
+
       db.run(`CREATE TABLE IF NOT EXISTS app_settings (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         setting_key TEXT UNIQUE NOT NULL,

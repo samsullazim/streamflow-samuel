@@ -469,7 +469,9 @@ async function startRotationStream(rotation, item) {
       youtube_channel_id: selectedChannel.id,
       is_youtube_api: true,
       schedule_time: rotation.start_time,
-      end_time: rotation.end_time
+      end_time: rotation.end_time,
+      random_start_max: rotation.random_start_max || 0,
+      random_duration_max: rotation.random_duration_max || 0
     });
 
     const startResult = await streamingService.startStream(stream.id);

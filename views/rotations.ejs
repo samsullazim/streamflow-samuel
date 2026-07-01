@@ -375,6 +375,19 @@
             </div>
           </div>
 
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-3">
+            <div>
+              <label class="text-sm font-medium text-white block mb-2">Random Start (menit)</label>
+              <input type="number" id="rotationRandomStart" name="randomStartMax" min="0" max="30" value="0" class="w-full px-4 py-2.5 bg-dark-700 border border-gray-600 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary" placeholder="0-30">
+              <p class="text-xs text-gray-500 mt-1">Random delay 0-N menit sebelum start</p>
+            </div>
+            <div>
+              <label class="text-sm font-medium text-white block mb-2">Random Durasi (menit)</label>
+              <input type="number" id="rotationRandomDuration" name="randomDurationMax" min="0" max="30" value="0" class="w-full px-4 py-2.5 bg-dark-700 border border-gray-600 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary" placeholder="0-30">
+              <p class="text-xs text-gray-500 mt-1">Random tambahan 0-N menit di durasi live</p>
+            </div>
+          </div>
+
           <div>
             <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
               <div>
@@ -632,6 +645,8 @@ function openCreateRotationModal() {
   document.getElementById('rotationId').value = '';
   document.getElementById('rotationDurationHours').value = '1';
   document.getElementById('rotationDurationMinutes').value = '0';
+  document.getElementById('rotationRandomStart').value = '0';
+  document.getElementById('rotationRandomDuration').value = '0';
   document.getElementById('rotationDurationBadge').textContent = 'End: --:--';
   document.getElementById('globalMonetization').checked = false;
   
@@ -1223,6 +1238,8 @@ async function saveRotation() {
   formData.append('end_time', endDateTimeStr);
   formData.append('youtube_channel_id', youtubeChannelId);
   formData.append('items', JSON.stringify(items));
+  formData.append('random_start_max', document.getElementById('rotationRandomStart').value || '0');
+  formData.append('random_duration_max', document.getElementById('rotationRandomDuration').value || '0');
   
   try {
     const url = rotationId ? `/api/rotations/${rotationId}` : '/api/rotations';
@@ -1294,6 +1311,9 @@ async function editRotation(id) {
       }
       
       calculateDuration();
+      
+      document.getElementById('rotationRandomStart').value = rotation.random_start_max || 0;
+      document.getElementById('rotationRandomDuration').value = rotation.random_duration_max || 0;
       
       if (rotation.items && rotation.items.length > 0) {
         document.getElementById('globalPrivacy').value = rotation.items[0].privacy || 'unlisted';
