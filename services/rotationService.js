@@ -219,9 +219,35 @@ async function checkRotations() {
       loggedScheduleInfo.delete(`notstarted_${rotation.id}`);
 
       if (now >= scheduledEnd) {
-        console.log(`[RotationService] Rotation ${rotation.name} time window has ended`);
-        
+        // Check if active stream has random_duration_max extension.
+        // If so, use the stream's extended end_time instead of rotation's end_time.
+        let effectiveEnd = scheduledEnd;
         const currentItem = items[currentIndex];
+        if (currentItem) {
+          const streamKey = `${rotation.id}_${currentItem.id}`;
+          if (activeRotationStreams.has(streamKey)) {
+            const streamInfo = activeRotationStreams.get(streamKey);
+            if (streamInfo?.streamId) {
+              try {
+                const liveStream = await Stream.findById(streamInfo.streamId);
+                if (liveStream && liveStream.end_time && liveStream.random_duration_max > 0) {
+                  const streamEnd = new Date(liveStream.end_time);
+                  if (streamEnd > scheduledEnd) {
+                    effectiveEnd = streamEnd;
+                  }
+                }
+              } catch(e) { /* ignore, use scheduledEnd */ }
+            }
+          }
+        }
+
+        if (now < effectiveEnd) {
+          // Stream has random duration extension, not time to stop yet
+          continue;
+        }
+
+        console.log(`[RotationService] Rotation ${rotation.name} time window has ended`);
+
         if (currentItem) {
           const streamKey = `${rotation.id}_${currentItem.id}`;
           if (activeRotationStreams.has(streamKey)) {
