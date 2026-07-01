@@ -10,3 +10,4 @@ db/sessions.db
 streamflow.log
 *.log
 streamflow-data-*.tar.gz
+temp/
