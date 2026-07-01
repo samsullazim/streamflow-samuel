@@ -482,7 +482,9 @@ async function startRotationStream(rotation, item) {
       const offsetMs = Math.floor(Math.random() * (rotation.random_start_max * 60 * 1000));
       const offsetMin = (offsetMs / 60000).toFixed(1);
       const newScheduleTime = new Date(Date.now() + offsetMs).toISOString();
-      await Stream.update(stream.id, { schedule_time: newScheduleTime });
+      // Set random_start_max = 0 on the stream so the scheduler doesn't
+      // apply a SECOND random delay on top of this one.
+      await Stream.update(stream.id, { schedule_time: newScheduleTime, random_start_max: 0 });
       console.log(`[RotationService] Stream ${stream.id}: random start delay = ${offsetMin} min (max ${rotation.random_start_max} min). Schedule_time updated to ${newScheduleTime}`);
       return { success: true, streamId: stream.id, broadcastId: broadcast.id, delayed: true, delayMinutes: parseFloat(offsetMin) };
     }
