@@ -3419,6 +3419,8 @@ app.post('/api/streams', isAuthenticated, [
       orientation: req.body.orientation || 'horizontal',
       loop_video: req.body.loopVideo === 'true' || req.body.loopVideo === true,
       use_advanced_settings: req.body.useAdvancedSettings === 'true' || req.body.useAdvancedSettings === true,
+      random_start_max: parseInt(req.body.randomStartMax) || 0,
+      random_duration_max: parseInt(req.body.randomDurationMax) || 0,
       user_id: req.session.userId
     };
     const serverTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -3544,7 +3546,9 @@ app.post('/api/streams/youtube', isAuthenticated, uploadThumbnail.single('thumbn
       youtube_thumbnail: localThumbnailPath,
       youtube_channel_id: selectedChannel.id,
       is_youtube_api: true,
-      youtube_monetization: ytMonetization === 'true' || ytMonetization === true
+      youtube_monetization: ytMonetization === 'true' || ytMonetization === true,
+      random_start_max: parseInt(req.body.randomStartMax) || 0,
+      random_duration_max: parseInt(req.body.randomDurationMax) || 0
     };
     
     if (scheduleStartTime) {
@@ -3663,6 +3667,12 @@ app.put('/api/streams/:id', isAuthenticated, uploadThumbnail.single('thumbnail')
       }
       if (req.body.ytMonetization !== undefined) {
         updateData.youtube_monetization = req.body.ytMonetization === 'true' || req.body.ytMonetization === true;
+      }
+      if (req.body.randomStartMax !== undefined) {
+        updateData.random_start_max = parseInt(req.body.randomStartMax) || 0;
+      }
+      if (req.body.randomDurationMax !== undefined) {
+        updateData.random_duration_max = parseInt(req.body.randomDurationMax) || 0;
       }
       
       if (req.body.scheduleStartTime) {
@@ -3863,6 +3873,12 @@ app.put('/api/streams/:id', isAuthenticated, uploadThumbnail.single('thumbnail')
     }
     if (req.body.useAdvancedSettings !== undefined) {
       updateData.use_advanced_settings = req.body.useAdvancedSettings === 'true' || req.body.useAdvancedSettings === true;
+    }
+    if (req.body.randomStartMax !== undefined) {
+      updateData.random_start_max = parseInt(req.body.randomStartMax) || 0;
+    }
+    if (req.body.randomDurationMax !== undefined) {
+      updateData.random_duration_max = parseInt(req.body.randomDurationMax) || 0;
     }
     const serverTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
     

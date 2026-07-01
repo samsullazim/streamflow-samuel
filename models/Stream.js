@@ -30,7 +30,9 @@ class Stream {
       youtube_thumbnail = null,
       youtube_channel_id = null,
       is_youtube_api = false,
-      youtube_monetization = false
+      youtube_monetization = false,
+      random_start_max = 0,
+      random_duration_max = 0
     } = streamData;
     const loop_video_int = loop_video ? 1 : 0;
     const use_advanced_settings_int = use_advanced_settings ? 1 : 0;
@@ -40,18 +42,20 @@ class Stream {
     const status_updated_at = new Date().toISOString();
     return new Promise((resolve, reject) => {
       db.run(
-        `INSERT INTO streams (
-          id, title, video_id, rtmp_url, stream_key, platform, platform_icon,
-          bitrate, resolution, fps, orientation, loop_video,
-          schedule_time, end_time, duration, status, status_updated_at, use_advanced_settings, user_id,
-          youtube_broadcast_id, youtube_stream_id, youtube_description, youtube_privacy, youtube_category, youtube_tags, youtube_thumbnail, youtube_channel_id, is_youtube_api, youtube_monetization
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [
-          id, title, video_id, rtmp_url, stream_key, platform, platform_icon,
-          bitrate, resolution, fps, orientation, loop_video_int,
-          schedule_time, end_time, duration, final_status, status_updated_at, use_advanced_settings_int, user_id,
-          youtube_broadcast_id, youtube_stream_id, youtube_description, youtube_privacy, youtube_category, youtube_tags, youtube_thumbnail, youtube_channel_id, is_youtube_api_int, youtube_monetization_int
-        ],
+          `INSERT INTO streams (
+            id, title, video_id, rtmp_url, stream_key, platform, platform_icon,
+            bitrate, resolution, fps, orientation, loop_video,
+            schedule_time, end_time, duration, status, status_updated_at, use_advanced_settings, user_id,
+            youtube_broadcast_id, youtube_stream_id, youtube_description, youtube_privacy, youtube_category, youtube_tags, youtube_thumbnail, youtube_channel_id, is_youtube_api, youtube_monetization,
+            random_start_max, random_duration_max
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            id, title, video_id, rtmp_url, stream_key, platform, platform_icon,
+            bitrate, resolution, fps, orientation, loop_video_int,
+            schedule_time, end_time, duration, final_status, status_updated_at, use_advanced_settings_int, user_id,
+            youtube_broadcast_id, youtube_stream_id, youtube_description, youtube_privacy, youtube_category, youtube_tags, youtube_thumbnail, youtube_channel_id, is_youtube_api_int, youtube_monetization_int,
+            random_start_max || 0, random_duration_max || 0
+          ],
         function (err) {
           if (err) {
             console.error('Error creating stream:', err.message);

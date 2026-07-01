@@ -385,6 +385,20 @@
                     class="w-full h-[42px] px-4 bg-dark-700 border border-gray-600 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary text-sm [color-scheme:dark]">
                 </div>
               </div>
+              <div class="grid grid-cols-2 gap-3 mt-3">
+                <div>
+                  <label class="text-xs text-gray-400 block mb-1">Random Start (menit)</label>
+                  <input type="number" id="randomStartMax" name="randomStartMax" min="0" max="30" value="0"
+                    class="w-full h-[42px] px-4 bg-dark-700 border border-gray-600 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary text-sm"
+                    placeholder="0-30">
+                </div>
+                <div>
+                  <label class="text-xs text-gray-400 block mb-1">Random Durasi (menit)</label>
+                  <input type="number" id="randomDurationMax" name="randomDurationMax" min="0" max="30" value="0"
+                    class="w-full h-[42px] px-4 bg-dark-700 border border-gray-600 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary text-sm"
+                    placeholder="0-30">
+                </div>
+              </div>
             </div>
             <div class="space-y-4">
               <div class="pt-2 border-t border-gray-700">
@@ -863,6 +877,20 @@
                   </label>
                   <input type="datetime-local" id="editScheduleEndTime" name="scheduleEndTime"
                     class="w-full h-[42px] px-4 bg-dark-700 border border-gray-600 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary text-sm [color-scheme:dark]">
+                </div>
+              </div>
+              <div class="grid grid-cols-2 gap-3 mt-3">
+                <div>
+                  <label class="text-xs text-gray-400 block mb-1">Random Start (menit)</label>
+                  <input type="number" id="editRandomStartMax" name="randomStartMax" min="0" max="30" value="0"
+                    class="w-full h-[42px] px-4 bg-dark-700 border border-gray-600 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary text-sm"
+                    placeholder="0-30">
+                </div>
+                <div>
+                  <label class="text-xs text-gray-400 block mb-1">Random Durasi (menit)</label>
+                  <input type="number" id="editRandomDurationMax" name="randomDurationMax" min="0" max="30" value="0"
+                    class="w-full h-[42px] px-4 bg-dark-700 border border-gray-600 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary text-sm"
+                    placeholder="0-30">
                 </div>
               </div>
             </div>
@@ -1642,6 +1670,8 @@
         }
 
         ytFormData.ytMonetization = document.getElementById('ytEnableMonetization').checked;
+        ytFormData.randomStartMax = (document.getElementById('randomStartMax') || {}).value || '0';
+        ytFormData.randomDurationMax = (document.getElementById('randomDurationMax') || {}).value || '0';
         
         const createBtn = document.querySelector('#newStreamModal button[type="submit"]');
         const originalBtnText = createBtn.innerHTML;
@@ -1761,6 +1791,10 @@
       if (scheduleEndTime) {
         formData.scheduleEndTime = scheduleEndTime;
       }
+      const randomStartMax = document.getElementById('randomStartMax');
+      const randomDurationMax = document.getElementById('randomDurationMax');
+      if (randomStartMax) formData.randomStartMax = randomStartMax.value || '0';
+      if (randomDurationMax) formData.randomDurationMax = randomDurationMax.value || '0';
       fetch('/api/streams', {
         method: 'POST',
         headers: {
@@ -3348,6 +3382,10 @@
       } else {
         document.getElementById('editScheduleEndTime').value = '';
       }
+      const editRandomStart = document.getElementById('editRandomStartMax');
+      const editRandomDuration = document.getElementById('editRandomDurationMax');
+      if (editRandomStart) editRandomStart.value = stream.random_start_max || 0;
+      if (editRandomDuration) editRandomDuration.value = stream.random_duration_max || 0;
       const advancedSettingsContent = document.getElementById('editAdvancedSettingsContent');
       const advancedSettingsCheckbox = document.getElementById('editAdvancedSettingsCheckbox');
       if (stream.use_advanced_settings) {
@@ -3794,6 +3832,10 @@
           }
           formData.scheduleStartTime = scheduleStartTime || '';
           formData.scheduleEndTime = scheduleEndTime || '';
+          const editRandomStart = document.getElementById('editRandomStartMax');
+          const editRandomDuration = document.getElementById('editRandomDurationMax');
+          if (editRandomStart) formData.randomStartMax = editRandomStart.value || '0';
+          if (editRandomDuration) formData.randomDurationMax = editRandomDuration.value || '0';
           fetch(`/api/streams/${streamId}`, {
             method: 'PUT',
             headers: {

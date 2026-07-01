@@ -1,6 +1,7 @@
 const Stream = require('../models/Stream');
 
 const scheduledTerminations = new Map();
+const randomStartOffsets = new Map();
 const SCHEDULE_CHECK_INTERVAL = 15000;
 const DURATION_CHECK_INTERVAL = 30000;
 
@@ -44,6 +45,29 @@ async function checkScheduledStreams() {
         continue;
       }
 
+      // Random start offset: if stream has random_start_max > 0,
+      // generate a random delay (0 to random_start_max minutes) once,
+      // and wait until schedule_time + delay before starting.
+      if (currentStream.random_start_max && currentStream.random_start_max > 0) {
+        if (!randomStartOffsets.has(stream.id)) {
+          const offsetMs = Math.floor(Math.random() * (currentStream.random_start_max * 60 * 1000));
+          randomStartOffsets.set(stream.id, { offsetMs, calculatedAt: Date.now() });
+          const offsetMin = (offsetMs / 60000).toFixed(1);
+          console.log(`[Scheduler] Stream ${stream.id}: random start offset = ${offsetMin} min (max ${currentStream.random_start_max} min)`);
+        }
+
+        const { offsetMs } = randomStartOffsets.get(stream.id);
+        const scheduleTime = new Date(currentStream.schedule_time).getTime();
+        const actualStartTime = scheduleTime + offsetMs;
+
+        if (Date.now() < actualStartTime) {
+          continue; // Not time yet, wait for next check
+        }
+
+        // Time to start — clean up the offset entry
+        randomStartOffsets.delete(stream.id);
+      }
+
       const baseUrl = process.env.BASE_URL || 'http://localhost:7575';
       const result = await streamingService.startStream(stream.id, false, baseUrl);
 
@@ -67,6 +91,24 @@ async function checkStreamDurations() {
     for (const stream of liveStreams) {
       if (!stream.end_time) {
         continue;
+      }
+
+      // Random duration extension: if stream has random_duration_max > 0
+      // and hasn't been extended yet, add a random extension to end_time once.
+      if (stream.random_duration_max && stream.random_duration_max > 0) {
+        const extensionKey = `duration_extended_${stream.id}`;
+        if (!randomStartOffsets.has(extensionKey)) {
+          const extensionMs = Math.floor(Math.random() * (stream.random_duration_max * 60 * 1000));
+          randomStartOffsets.set(extensionKey, { offsetMs: extensionMs, calculatedAt: Date.now() });
+
+          const currentEnd = new Date(stream.end_time);
+          const newEnd = new Date(currentEnd.getTime() + extensionMs);
+          const extMin = (extensionMs / 60000).toFixed(1);
+          console.log(`[Scheduler] Stream ${stream.id}: random duration extension = +${extMin} min (max ${stream.random_duration_max} min). New end_time: ${newEnd.toISOString()}`);
+
+          await Stream.update(stream.id, { end_time: newEnd.toISOString() });
+          stream.end_time = newEnd.toISOString();
+        }
       }
 
       const endTime = new Date(stream.end_time);
@@ -155,6 +197,8 @@ function getScheduledTermination(streamId) {
 }
 
 function handleStreamStopped(streamId) {
+  // Clean up random duration extension flag
+  randomStartOffsets.delete(`duration_extended_${streamId}`);
   return cancelStreamTermination(streamId);
 }
 
@@ -172,6 +216,7 @@ function shutdown() {
     }
   }
   scheduledTerminations.clear();
+  randomStartOffsets.clear();
 }
 
 module.exports = {
