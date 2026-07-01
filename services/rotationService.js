@@ -474,6 +474,19 @@ async function startRotationStream(rotation, item) {
       random_duration_max: rotation.random_duration_max || 0
     });
 
+    // Random start: if random_start_max > 0, delay the start by updating
+    // schedule_time to now + random_offset. The scheduler will pick it up
+    // and start the stream when the time comes. This avoids blocking the
+    // rotation check loop with a setTimeout.
+    if (rotation.random_start_max && rotation.random_start_max > 0) {
+      const offsetMs = Math.floor(Math.random() * (rotation.random_start_max * 60 * 1000));
+      const offsetMin = (offsetMs / 60000).toFixed(1);
+      const newScheduleTime = new Date(Date.now() + offsetMs).toISOString();
+      await Stream.update(stream.id, { schedule_time: newScheduleTime });
+      console.log(`[RotationService] Stream ${stream.id}: random start delay = ${offsetMin} min (max ${rotation.random_start_max} min). Schedule_time updated to ${newScheduleTime}`);
+      return { success: true, streamId: stream.id, broadcastId: broadcast.id, delayed: true, delayMinutes: parseFloat(offsetMin) };
+    }
+
     const startResult = await streamingService.startStream(stream.id);
     if (!startResult.success) {
       return {
