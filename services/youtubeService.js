@@ -179,9 +179,49 @@ async function createYouTubeBroadcast(streamId, baseUrl) {
       console.log(`[YouTubeService] Stream ${streamId} already has YouTube broadcast, skipping creation`);
       loggedAlreadyHasBroadcast.add(streamId);
     }
-    return { 
-      success: true, 
-      rtmpUrl: stream.rtmp_url, 
+
+    // Still try to upload thumbnail if set but not yet uploaded
+    if (stream.youtube_thumbnail && !stream.thumbnail_uploaded) {
+      try {
+        const projectRoot = path.resolve(__dirname, '..');
+        const thumbnailPath = path.join(projectRoot, 'public', stream.youtube_thumbnail.replace(/^\/+/, ''));
+        if (fs.existsSync(thumbnailPath)) {
+          const selectedChannel = await YoutubeChannel.findById(stream.youtube_channel_id);
+          if (selectedChannel) {
+            const accessToken2 = await getValidAccessToken(
+              await User.findById(stream.user_id), selectedChannel);
+            const form = new FormData();
+            form.append('media', fs.createReadStream(thumbnailPath));
+            let uploaded = false;
+            for (let attempt = 0; attempt < 3 && !uploaded; attempt++) {
+              try {
+                await ytRequest('post', 'https://www.googleapis.com/upload/youtube/v3/thumbnails/set', accessToken2, {
+                  params: { videoId: stream.youtube_broadcast_id },
+                  data: form,
+                  headers: form.getHeaders()
+                });
+                console.log(`[YouTubeService] Uploaded thumbnail for existing broadcast ${stream.youtube_broadcast_id}`);
+                uploaded = true;
+                await Stream.update(streamId, { thumbnail_uploaded: 1 });
+              } catch (thumbErr) {
+                if (thumbErr.message && thumbErr.message.includes('429') && attempt < 2) {
+                  console.log(`[YouTubeService] Thumbnail rate limited, retrying in 60s (attempt ${attempt + 1}/3)`);
+                  await new Promise(r => setTimeout(r, 60000));
+                } else {
+                  console.log(`[YouTubeService] Could not upload thumbnail for existing broadcast: ${thumbErr.message}`);
+                }
+              }
+            }
+          }
+        }
+      } catch (thumbError) {
+        console.log('[YouTubeService] Thumbnail upload error (existing broadcast):', thumbError.message);
+      }
+    }
+
+    return {
+      success: true,
+      rtmpUrl: stream.rtmp_url,
       streamKey: stream.stream_key,
       broadcastId: stream.youtube_broadcast_id,
       streamId: stream.youtube_stream_id
@@ -305,16 +345,30 @@ async function createYouTubeBroadcast(streamId, baseUrl) {
   if (stream.youtube_thumbnail) {
     try {
       const projectRoot = path.resolve(__dirname, '..');
-      const thumbnailPath = path.join(projectRoot, 'public', stream.youtube_thumbnail);
+      const thumbnailPath = path.join(projectRoot, 'public', stream.youtube_thumbnail.replace(/^\/+/, ''));
       if (fs.existsSync(thumbnailPath)) {
         const form = new FormData();
         form.append('media', fs.createReadStream(thumbnailPath));
-        await ytRequest('post', 'https://www.googleapis.com/upload/youtube/v3/thumbnails/set', accessToken, {
-          params: { videoId: broadcast.id },
-          data: form,
-          headers: form.getHeaders()
-        });
-        console.log(`[YouTubeService] Uploaded thumbnail for broadcast ${broadcast.id}`);
+        let uploaded = false;
+        for (let attempt = 0; attempt < 3 && !uploaded; attempt++) {
+          try {
+            await ytRequest('post', 'https://www.googleapis.com/upload/youtube/v3/thumbnails/set', accessToken, {
+              params: { videoId: broadcast.id },
+              data: form,
+              headers: form.getHeaders()
+            });
+            console.log(`[YouTubeService] Uploaded thumbnail for broadcast ${broadcast.id}`);
+            uploaded = true;
+            await Stream.update(streamId, { thumbnail_uploaded: 1 });
+          } catch (thumbErr) {
+            if (thumbErr.message && thumbErr.message.includes('429') && attempt < 2) {
+              console.log(`[YouTubeService] Thumbnail rate limited, retrying in 60s (attempt ${attempt + 1}/3)`);
+              await new Promise(r => setTimeout(r, 60000));
+            } else {
+              throw thumbErr;
+            }
+          }
+        }
       }
     } catch (thumbError) {
       console.log('[YouTubeService] Note: Could not upload thumbnail:', thumbError.message);

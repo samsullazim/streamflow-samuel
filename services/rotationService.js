@@ -436,22 +436,8 @@ async function startRotationStream(rotation, item) {
     const streamKey = liveStream.cdn.ingestionInfo.streamName;
 
     const thumbnailToUpload = item.original_thumbnail_path || item.thumbnail_path;
-    if (thumbnailToUpload) {
-      try {
-        const thumbnailPath = path.join(__dirname, '..', 'public', 'uploads', 'thumbnails', thumbnailToUpload);
-        if (fs.existsSync(thumbnailPath)) {
-          const form = new FormData();
-          form.append('media', fs.createReadStream(thumbnailPath));
-          await ytRequest('post', 'https://www.googleapis.com/upload/youtube/v3/thumbnails/set', accessToken, {
-            params: { videoId: broadcast.id },
-            data: form,
-            headers: form.getHeaders()
-          });
-        }
-      } catch (thumbError) {
-        console.error('[RotationService] Error setting thumbnail:', thumbError.message);
-      }
-    }
+    // Thumbnail upload moved to createYouTubeBroadcast to avoid double-upload and rate limits.
+    // The youtube_thumbnail field is set on the stream record so createYouTubeBroadcast can handle it.
 
     const tags = item.tags ? item.tags.split(',').map(t => t.trim()).filter(t => t) : [];
     if (tags.length > 0 || item.category) {
@@ -474,6 +460,13 @@ async function startRotationStream(rotation, item) {
       }
     }
 
+    // Parse rotation times and calculate duration
+    const rotStart = parseLocalDateTime(rotation.start_time);
+    const rotEnd = parseLocalDateTime(rotation.end_time);
+    let durationMs = rotEnd - rotStart;
+    if (durationMs <= 0) durationMs += 24 * 60 * 60 * 1000; // Handle overnight
+    const durationMin = Math.round(durationMs / 60000);
+
     const stream = await Stream.create({
       title: item.title,
       video_id: actualVideoId,
@@ -494,24 +487,31 @@ async function startRotationStream(rotation, item) {
       youtube_monetization: monetizationEnabled,
       youtube_channel_id: selectedChannel.id,
       is_youtube_api: true,
-      schedule_time: rotation.start_time,
-      end_time: rotation.end_time,
+      youtube_thumbnail: item.thumbnail_path ? '/uploads/thumbnails/' + item.thumbnail_path : (item.original_thumbnail_path ? '/uploads/thumbnails/' + item.original_thumbnail_path : null),
+      schedule_time: rotStart.toISOString(),
+      end_time: rotEnd.toISOString(),
+      duration: durationMin,
       random_start_max: rotation.random_start_max || 0,
       random_duration_max: rotation.random_duration_max || 0
     });
 
     // Random start: if random_start_max > 0, delay the start by updating
-    // schedule_time to now + random_offset. The scheduler will pick it up
-    // and start the stream when the time comes. This avoids blocking the
-    // rotation check loop with a setTimeout.
+    // schedule_time to now + random_offset. Also adjust end_time to maintain
+    // the same duration (end = new_start + duration). This avoids blocking
+    // the rotation check loop with a setTimeout.
     if (rotation.random_start_max && rotation.random_start_max > 0) {
       const offsetMs = Math.floor(Math.random() * (rotation.random_start_max * 60 * 1000));
       const offsetMin = (offsetMs / 60000).toFixed(1);
-      const newScheduleTime = new Date(Date.now() + offsetMs).toISOString();
+      const newScheduleTime = new Date(Date.now() + offsetMs);
+      const newEndTime = new Date(newScheduleTime.getTime() + durationMs);
       // Set random_start_max = 0 on the stream so the scheduler doesn't
       // apply a SECOND random delay on top of this one.
-      await Stream.update(stream.id, { schedule_time: newScheduleTime, random_start_max: 0 });
-      console.log(`[RotationService] Stream ${stream.id}: random start delay = ${offsetMin} min (max ${rotation.random_start_max} min). Schedule_time updated to ${newScheduleTime}`);
+      await Stream.update(stream.id, {
+        schedule_time: newScheduleTime.toISOString(),
+        end_time: newEndTime.toISOString(),
+        random_start_max: 0
+      });
+      console.log(`[RotationService] Stream ${stream.id}: random start delay = ${offsetMin} min (max ${rotation.random_start_max} min). Schedule: ${newScheduleTime.toISOString()}, End: ${newEndTime.toISOString()}, Duration: ${durationMin} min`);
       return { success: true, streamId: stream.id, broadcastId: broadcast.id, delayed: true, delayMinutes: parseFloat(offsetMin) };
     }
 

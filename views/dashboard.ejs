@@ -378,11 +378,12 @@
                 </div>
                 <div>
                   <label class="text-xs text-gray-400 mb-1 flex items-end">
-                    <span>End Stream</span>
-                    <span id="durationBadge" class="ml-2 bg-gray-700 text-xs text-gray-300 px-2 py-0.5 rounded hidden leading-none">00:00</span>
+                    <span>Target Durasi (menit)</span>
+                    <span id="durationBadge" class="ml-2 bg-green-700/70 text-xs text-green-200 px-2 py-0.5 rounded hidden leading-none">End: --:--</span>
                   </label>
-                  <input type="datetime-local" id="scheduleEndTime" name="scheduleEndTime"
-                    class="w-full h-[42px] px-4 bg-dark-700 border border-gray-600 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary text-sm [color-scheme:dark]">
+                  <input type="number" id="targetDuration" name="targetDuration" min="1" max="600" value="60"
+                    class="w-full h-[42px] px-4 bg-dark-700 border border-gray-600 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary text-sm"
+                    placeholder="60">
                 </div>
               </div>
               <div class="grid grid-cols-2 gap-3 mt-3">
@@ -872,11 +873,12 @@
                 </div>
                 <div>
                   <label class="text-xs text-gray-400 mb-1 flex items-end">
-                    <span>End Stream</span>
-                    <span id="editDurationBadge" class="ml-2 bg-gray-700 text-xs text-gray-300 px-2 py-0.5 rounded hidden leading-none">00:00</span>
+                    <span>Target Durasi (menit)</span>
+                    <span id="editDurationBadge" class="ml-2 bg-green-700/70 text-xs text-green-200 px-2 py-0.5 rounded hidden leading-none">End: --:--</span>
                   </label>
-                  <input type="datetime-local" id="editScheduleEndTime" name="scheduleEndTime"
-                    class="w-full h-[42px] px-4 bg-dark-700 border border-gray-600 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary text-sm [color-scheme:dark]">
+                  <input type="number" id="editTargetDuration" name="targetDuration" min="1" max="600" value="60"
+                    class="w-full h-[42px] px-4 bg-dark-700 border border-gray-600 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary text-sm"
+                    placeholder="60">
                 </div>
               </div>
               <div class="grid grid-cols-2 gap-3 mt-3">
@@ -1776,20 +1778,18 @@
         useAdvancedSettings: !document.getElementById('advancedSettingsContent').classList.contains('hidden')
       };
       const scheduleStartTime = document.getElementById('scheduleStartTime').value;
-      const scheduleEndTime = document.getElementById('scheduleEndTime').value;
-      if (scheduleStartTime && scheduleEndTime) {
+      const targetDuration = document.getElementById('targetDuration').value;
+      // Auto-calculate end time from start + target duration
+      if (scheduleStartTime && targetDuration && parseInt(targetDuration) > 0) {
         const startDate = new Date(scheduleStartTime);
-        const endDate = new Date(scheduleEndTime);
-        if (endDate <= startDate) {
-          showToast('error', 'End stream must be after start stream');
-          return;
-        }
-      }
-      if (scheduleStartTime) {
+        const endDate = new Date(startDate.getTime() + parseInt(targetDuration) * 60 * 1000);
+        // Format as datetime-local string (YYYY-MM-DDTHH:MM)
+        const pad = n => String(n).padStart(2, '0');
+        const endTimeStr = endDate.getFullYear() + '-' + pad(endDate.getMonth() + 1) + '-' + pad(endDate.getDate()) + 'T' + pad(endDate.getHours()) + ':' + pad(endDate.getMinutes());
         formData.scheduleStartTime = scheduleStartTime;
-      }
-      if (scheduleEndTime) {
-        formData.scheduleEndTime = scheduleEndTime;
+        formData.scheduleEndTime = endTimeStr;
+      } else if (scheduleStartTime) {
+        formData.scheduleStartTime = scheduleStartTime;
       }
       const randomStartMax = document.getElementById('randomStartMax');
       const randomDurationMax = document.getElementById('randomDurationMax');
@@ -3376,11 +3376,19 @@
       } else {
         document.getElementById('editScheduleStartTime').value = '';
       }
-      if (stream.end_time && !isYoutubeStream) {
-        const endDate = new Date(stream.end_time);
-        document.getElementById('editScheduleEndTime').value = formatDateTimeLocal(endDate);
-      } else {
-        document.getElementById('editScheduleEndTime').value = '';
+      // Calculate target duration from stream's start/end time
+      const editTargetDur = document.getElementById('editTargetDuration');
+      if (editTargetDur) {
+        if (stream.schedule_time && stream.end_time && !isYoutubeStream) {
+          const startDate = new Date(stream.schedule_time);
+          const endDate = new Date(stream.end_time);
+          const durationMin = Math.round((endDate - startDate) / 60000);
+          editTargetDur.value = durationMin > 0 ? durationMin : 60;
+        } else if (stream.duration && !isYoutubeStream) {
+          editTargetDur.value = stream.duration;
+        } else {
+          editTargetDur.value = 60;
+        }
       }
       const editRandomStart = document.getElementById('editRandomStartMax');
       const editRandomDuration = document.getElementById('editRandomDurationMax');
@@ -3821,17 +3829,22 @@
             useAdvancedSettings: !document.getElementById('editAdvancedSettingsContent').classList.contains('hidden')
           };
           const scheduleStartTime = document.getElementById('editScheduleStartTime').value;
-          const scheduleEndTime = document.getElementById('editScheduleEndTime').value;
-          if (scheduleStartTime && scheduleEndTime) {
+          const targetDuration = document.getElementById('editTargetDuration').value;
+          // Auto-calculate end time from start + target duration
+          if (scheduleStartTime && targetDuration && parseInt(targetDuration) > 0) {
             const startDate = new Date(scheduleStartTime);
-            const endDate = new Date(scheduleEndTime);
-            if (endDate <= startDate) {
-              showToast('error', 'End stream must be after start stream');
-              return;
-            }
+            const endDate = new Date(startDate.getTime() + parseInt(targetDuration) * 60 * 1000);
+            const pad = n => String(n).padStart(2, '0');
+            const endTimeStr = endDate.getFullYear() + '-' + pad(endDate.getMonth() + 1) + '-' + pad(endDate.getDate()) + 'T' + pad(endDate.getHours()) + ':' + pad(endDate.getMinutes());
+            formData.scheduleStartTime = scheduleStartTime;
+            formData.scheduleEndTime = endTimeStr;
+          } else if (scheduleStartTime) {
+            formData.scheduleStartTime = scheduleStartTime;
+            formData.scheduleEndTime = '';
+          } else {
+            formData.scheduleStartTime = '';
+            formData.scheduleEndTime = '';
           }
-          formData.scheduleStartTime = scheduleStartTime || '';
-          formData.scheduleEndTime = scheduleEndTime || '';
           const editRandomStart = document.getElementById('editRandomStartMax');
           const editRandomDuration = document.getElementById('editRandomDurationMax');
           if (editRandomStart) formData.randomStartMax = editRandomStart.value || '0';
@@ -3979,66 +3992,53 @@
       return new Date(date.getTime() + offsetDiff * 60 * 1000);
     }
 
-    function calculateDuration(startTime, endTime, isEdit = false) {
+    function calculateDuration(startTime, targetDuration, isEdit = false) {
       const badge = document.getElementById(isEdit ? 'editDurationBadge' : 'durationBadge');
       if (!badge) return;
 
-      if (!endTime) {
+      if (!startTime || !targetDuration || targetDuration < 1) {
         badge.classList.add('hidden');
         return;
       }
 
-      const endDate = new Date(endTime);
-      let startDate;
+      const startDate = new Date(startTime);
+      const durationMs = parseInt(targetDuration) * 60 * 1000;
+      const endDate = new Date(startDate.getTime() + durationMs);
 
-      if (startTime) {
-        startDate = new Date(startTime);
-      } else {
-        startDate = new Date();
-      }
-
-      const diffMs = endDate - startDate;
-      if (diffMs <= 0) {
-        badge.classList.add('hidden');
-        return;
-      }
-
-      const totalMinutes = Math.floor(diffMs / 60000);
-      const hours = Math.floor(totalMinutes / 60);
-      const minutes = totalMinutes % 60;
-      const formatted = String(hours).padStart(2, '0') + ':' + String(minutes).padStart(2, '0');
-
-      badge.textContent = formatted;
+      // Format end time as HH:MM
+      const endHours = String(endDate.getHours()).padStart(2, '0');
+      const endMins = String(endDate.getMinutes()).padStart(2, '0');
+      badge.textContent = 'End: ' + endHours + ':' + endMins;
       badge.classList.remove('hidden');
     }
 
     function updateDurationBadge(isEdit = false) {
       const startInput = document.getElementById(isEdit ? 'editScheduleStartTime' : 'scheduleStartTime');
-      const endInput = document.getElementById(isEdit ? 'editScheduleEndTime' : 'scheduleEndTime');
-      calculateDuration(startInput?.value, endInput?.value, isEdit);
+      const durInput = document.getElementById(isEdit ? 'editTargetDuration' : 'targetDuration');
+      calculateDuration(startInput?.value, durInput?.value, isEdit);
     }
 
     document.addEventListener('DOMContentLoaded', function () {
       const scheduleStartTime = document.getElementById('scheduleStartTime');
-      const scheduleEndTime = document.getElementById('scheduleEndTime');
+      const targetDuration = document.getElementById('targetDuration');
       if (scheduleStartTime) {
         scheduleStartTime.addEventListener('change', () => updateDurationBadge(false));
         scheduleStartTime.addEventListener('input', () => updateDurationBadge(false));
       }
-      if (scheduleEndTime) {
-        scheduleEndTime.addEventListener('change', () => updateDurationBadge(false));
-        scheduleEndTime.addEventListener('input', () => updateDurationBadge(false));
+      if (targetDuration) {
+        targetDuration.addEventListener('change', () => updateDurationBadge(false));
+        targetDuration.addEventListener('input', () => updateDurationBadge(false));
       }
 
       const editScheduleStartTime = document.getElementById('editScheduleStartTime');
-      const editScheduleEndTime = document.getElementById('editScheduleEndTime');
+      const editTargetDuration = document.getElementById('editTargetDuration');
       if (editScheduleStartTime) {
         editScheduleStartTime.addEventListener('change', () => updateDurationBadge(true));
         editScheduleStartTime.addEventListener('input', () => updateDurationBadge(true));
       }
-      if (editScheduleEndTime) {
-        editScheduleEndTime.addEventListener('change', () => updateDurationBadge(true));
-        editScheduleEndTime.addEventListener('input', () => updateDurationBadge(true));
+      if (editTargetDuration) {
+        editTargetDuration.addEventListener('change', () => updateDurationBadge(true));
+        editTargetDuration.addEventListener('input', () => updateDurationBadge(true));
       }
 
       const ytScheduleStart = document.getElementById('ytScheduleStart');
